@@ -5,22 +5,56 @@ using System.Text;
 
 namespace ScratchesEPS {
   class CustomStringDict<T> : IDictionary<string, T> {
-    private Entry[] _slots;
-    private int     _slotsUsed;
+    private Entry[] _buckets;
+    private int     _bucketsUsed;
 
     public CustomStringDict(int initialSize) {
-      _slots = new Entry[initialSize];
-      for (int i = 0; i < _slots.Length; i++) {
-        _slots[i] = new Entry(initialSize: 2);
+      _buckets = new Entry[initialSize];
+      for (int i = 0; i < _buckets.Length; i++) {
+        _buckets[i] = new Entry(initialSize: 2);
       }
     }
 
-    public IEnumerator<KeyValuePair<string, T>> GetEnumerator() {
-      throw new NotImplementedException();
-    }
+    public IEnumerator<KeyValuePair<string, T>> GetEnumerator() => new Enumerator(_buckets);
     IEnumerator IEnumerable.GetEnumerator() {
       return GetEnumerator();
     }
+
+    private struct Enumerator : IEnumerator<KeyValuePair<string, T>> {
+      private readonly Entry[] _buckets;
+      KeyValuePair<string, T> _current;
+      int _bucketIndex, _slotIndex;
+
+      public Enumerator(Entry[] buckets) {
+        _buckets   = buckets;
+        _current = default;
+        _bucketIndex = 0;
+        _slotIndex   = 0;
+      }
+
+      public bool MoveNext() {
+        for (; _bucketIndex < _buckets.Length; _bucketIndex++) {
+          ref var bucket = ref _buckets[_bucketIndex];
+          if(_slotIndex < bucket.SlotsUsed) {
+            _current = bucket.Slots[_slotIndex++];
+            return true;
+          }
+        }
+
+        return false;
+      }
+      public void Reset() {
+        _current = default;
+        _bucketIndex = 0;
+        _slotIndex   = 0;
+      }
+      public KeyValuePair<string, T> Current => _current;
+
+      object? IEnumerator.Current => Current;
+
+      public void Dispose() {}
+    }
+
     public void Add(KeyValuePair<string, T> item) {
       Add(item.Key, item.Value);
     }
@@ -39,14 +73,14 @@ namespace ScratchesEPS {
     public int Count { get; }
     public bool IsReadOnly { get; }
     public void Add(string key, T value) {
-      if(_slotsUsed > _slots.Length * 0.75) {
+      if(_bucketsUsed > _buckets.Length * 0.75) {
         Resize();
       }
 
-      var index = Mod(key.GetHashCode(), _slots.Length);
-      _slots[index].Add(key, value);
+      var index = Mod(key.GetHashCode(), _buckets.Length);
+      _buckets[index].Add(key, value);
 
-      _slotsUsed++;
+      _bucketsUsed++;
     }
 
     int Mod(int a, int b) {
@@ -54,10 +88,10 @@ namespace ScratchesEPS {
     }
 
     private void Resize() {
-      var oldSlots = _slots;
-      _slots = new Entry[_slots.Length * 2];
-      for (int i = 0; i < _slots.Length; i++) {
-        _slots[i] = new Entry(initialSize: 2);
+      var oldSlots = _buckets;
+      _buckets = new Entry[_buckets.Length * 2];
+      for (int i = 0; i < _buckets.Length; i++) {
+        _buckets[i] = new Entry(initialSize: 2);
       }
 
       for (var i = 0; i < oldSlots.Length; i++) {
@@ -71,7 +105,7 @@ namespace ScratchesEPS {
       throw new NotImplementedException();
     }
     public bool ContainsValue(T value) {
-      foreach (var bucket in _slots) {
+      foreach (var bucket in _buckets) {
         for (int i = 0; i < bucket.SlotsUsed; i++) {
           if(bucket.Slots[i].Value.Equals(value))
             return true;
@@ -87,8 +121,8 @@ namespace ScratchesEPS {
       return TryGetValue((ReadOnlySpan<char>)key, out value);
     }
     public bool TryGetValue(ReadOnlySpan<char> key, out T value) {
-      var index = Mod(string.GetHashCode(key), _slots.Length);
-      return _slots[index].Find(key, out value);
+      var index = Mod(string.GetHashCode(key), _buckets.Length);
+      return _buckets[index].Find(key, out value);
     }
 
     public T this[string key] {
