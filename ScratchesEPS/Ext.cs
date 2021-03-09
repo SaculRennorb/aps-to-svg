@@ -1,4 +1,7 @@
 ﻿using System;
+using System.Diagnostics;
+using System.Globalization;
+using System.Runtime.CompilerServices;
 using System.Text;
 
 namespace ScratchesEPS {
@@ -28,10 +31,12 @@ namespace ScratchesEPS {
         default:   return c.ToString();
       }
     }
-
+    
+    [DebuggerStepThrough]
     public static bool IsDelimiter(char c) {
-      return char.IsWhiteSpace(c) || c == '{' || c == '}' || c == '[' || c == ']';
+      return char.IsWhiteSpace(c) || c == '{' || c == '}' || c == '[' || c == ']' || c == '/';
     }
+    [DebuggerStepThrough]
     public static bool IsLineEnd(char c) {
       return c == '\n' || c == '\r';
     }
@@ -54,21 +59,87 @@ namespace ScratchesEPS {
 
       return i;
     }
+    
+    [DebuggerStepThrough]
+    public static int Mod(int a, int b) {
+      return ((a % b) + b) % b;
+    }
+    
+    [DebuggerStepThrough]
+    public static float ToFloat(object o) {
+      if(o is float fVal) return fVal;
+      if(o is int   iVal) return iVal;
+      
+      throw new Exception("not convertible to float");
+    }
+    
+    [DebuggerStepThrough]
+    public static int ParseInt(ReadOnlySpan<char> span) {
+      var radixIndex = span.IndexOf('#');
+      if(radixIndex > -1) {
+        var radix = int.Parse(span.Slice(0, radixIndex));
+        
+        return Convert.ToInt32(new string(span.Slice(radixIndex + 1)), radix);
+      } else {
+        return int.Parse(span);
+      }
+    }
+    
+    [DebuggerStepThrough]
+    public static float ParseFloat(ReadOnlySpan<char> span) {
+      if(span[0] == '.') {
+        Span<char> newBuff = stackalloc char[span.Length + 1];
+        newBuff[0] = '0';
+        span.CopyTo(newBuff[1..]);
+        return float.Parse(newBuff, provider: CultureInfo.InvariantCulture);
+      } else {
+        return float.Parse(span, provider: CultureInfo.InvariantCulture);
+      }
+    }
 
-    public static void WriteRed(string msg) {
+    [DebuggerStepThrough]
+    public static void WriteLineStub([CallerMemberName] string name = null) {
+      Console.Write("\u001b[31m");
+      Console.Write(name);
+      Console.Write(" stub");
+      Console.WriteLine("\u001b[0m");
+    }
+    [DebuggerStepThrough]
+    public static void WriteLineRed(string msg) {
       Console.Write("\u001b[31m");
       Console.Write(msg);
       Console.WriteLine("\u001b[0m");
     }
-    public static void WriteYellow(string msg) {
+    [DebuggerStepThrough]
+    public static void WriteLineYellow(string msg) {
       Console.Write("\u001b[33m");
       Console.Write(msg);
       Console.WriteLine("\u001b[0m");
     }
-    public static void WriteGreen(string msg) {
+    [DebuggerStepThrough]
+    public static void WriteLineGreen(string msg) {
       Console.Write("\u001b[32m");
       Console.Write(msg);
       Console.WriteLine("\u001b[0m");
+    }
+    [DebuggerStepThrough]
+    public static void WriteLinePurple(string msg) {
+      Console.Write("\u001b[35m");
+      Console.Write(msg);
+      Console.WriteLine("\u001b[0m");
+    }
+    
+    [DebuggerStepThrough]
+    public static void WritePurple(string msg) {
+      Console.Write("\u001b[35m");
+      Console.Write(msg);
+      Console.Write("\u001b[0m");
+    }
+    [DebuggerStepThrough]
+    public static void WriteGreen(string msg) {
+      Console.Write("\u001b[32m");
+      Console.Write(msg);
+      Console.Write("\u001b[0m");
     }
   }
 }

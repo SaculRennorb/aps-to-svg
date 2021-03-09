@@ -47,6 +47,7 @@ namespace ScratchesEPS {
     SET_LINE_JOIN,
     SET_LINE_WIDTH,
     SET_MITER_LIMIT,
+    SET_FLAT,
     MOVE_TO,
     R_MOVE_TO,
     LINE_TO,
@@ -59,6 +60,7 @@ namespace ScratchesEPS {
     ARC_TO,
     CLOSE_PATH,
     FILL,
+    EO_FILL,
     STROKE,
 
     SET_GRAY,
@@ -68,7 +70,10 @@ namespace ScratchesEPS {
     SET_COLOR,
     SET_PATTERN,
 
+    CURRENT_GRAY,
+
     CLIP,
+    EO_CLIP,
     CLIP_PATH,
     CLIP_SAVE,
     CLIP_RESTORE,
@@ -79,10 +84,30 @@ namespace ScratchesEPS {
     G_SAVE,
     G_RESTORE,
 
+    CURRENT_FLAT,
+    CURRENT_TRANSFER,
 
+    STRING,
+    ANCHOR_SEARCH,
 
-           MATRIX,
-    INVERT_MATRIX,
+    ARRAY,
+    LENGTH,
+    A_STORE,
+    A_LOAD,
+    GET_INTERVAL,
+    PUT_INTERVAL,
+
+    SET_TRANSFER,
+
+            MATRIX,
+        SET_MATRIX,
+     INVERT_MATRIX,
+    CURRENT_MATRIX,
+    DEFAULT_MATRIX,
+
+    D_TRANSFORM,
+    I_TRANSFORM,
+    TRANSFORM,
 
     TRANSLATE,
     ROTATE,
@@ -91,6 +116,8 @@ namespace ScratchesEPS {
 
     PUSH,
     POP,
+    PUT,
+    GET,
     DUP,
     EXCH,
     COPY,
@@ -111,6 +138,7 @@ namespace ScratchesEPS {
     FORALL,
     EXIT,
     STOP,
+    STOPPED,
 
     TYPE,
     X_CHECK,
@@ -120,7 +148,8 @@ namespace ScratchesEPS {
     DICT,
     SYSTEM_DICT,
     GLOBAL_DICT,
-    USER_DICT,
+      USER_DICT,
+    STATUS_DICT,
     BEGIN,
     END,
     DEF,
@@ -129,7 +158,13 @@ namespace ScratchesEPS {
     WHERE,
     KNOWN,
 
+    SAVE,
+    RESTORE,
+
+    FIND_FONT,
+
     NULL,
+    VERSION,
   }
 
   enum TokenType {
@@ -141,22 +176,22 @@ namespace ScratchesEPS {
     LITERAL_BOOLEAN,
     LITERAL_STRING,
     LITERAL_STRING_HEX,
+    LITERAL_NAME,
     KEYWORD,
     BRACE,
-    BRACKETS,
-    NAME_DEF,
+    BRACKET,
     EOF
   }
-  
+
   struct Token {
     public TokenType Type;
     public Keyword Keyword;
-    public int Start;
-    public int Length;
+    public int Start, Length;
+    public int Line , Column;
     public ArraySegment<char> Content;
 
     public override string ToString() {
-      return $"[{Start:D4}..{Length:D3}] Type: {Type}, Keyword: {Keyword}, Content: {Ext.Dump(Content)}";
+      return $"[{Line:D4}:{Column:D3}] Type: {Type}, Keyword: {Keyword}, Content: {Ext.Dump(Content)}";
     }
   }
   
@@ -179,45 +214,60 @@ namespace ScratchesEPS {
 
     char[] _data;
     int _cursor;
+    int _lineCursor, _colCursor;
 
     public Tokenizer(char[] data) {
       _data = data;
       _cursor = 0;
+      _lineCursor = 1;
+      _colCursor  = 1;
     }
 
     public Token GetNextToken() {
       var token = new Token();
 
       do {
-        if (_cursor == _data.Length) {
+        if(_cursor == _data.Length) {
           token.Type = TokenType.EOF;
           return token;
         }
 
-        if (char.IsWhiteSpace(_data[_cursor])) {
+        if(_data[_cursor] == '\r') {
           _cursor++;
-        }
-        else {
+          _lineCursor++;
+          _colCursor = 1;
+          if(_cursor < _data.Length && _data[_cursor] == '\n') {
+            _cursor++;
+          }
+        } else if (_data[_cursor] == '\n') {
+          _cursor++;
+          _lineCursor++;
+          _colCursor = 1;
+        } else if(char.IsWhiteSpace(_data[_cursor])) {
+          _cursor++;
+          _colCursor++;
+        } else {
           break;
         }
       } while (true);
 
 
       token.Start = _cursor;
+      token.Line   = _lineCursor;
+      token.Column =  _colCursor;
 
-      switch (_data[_cursor]) {
+      switch(_data[_cursor]) {
         case '%': {
           var line = SegmentUntilEOL(_cursor + 1);
-          if (line.Count > 0 && line[0] == '!')
+          if(line.Count > 0 && line[0] == '!')
             token.Type = TokenType.PDF_TAG;
           else
             token.Type = TokenType.COMMENT;
           token.Content = line;
           token.Length = line.Count + 1;
 
-          _cursor += line.Count + 2;
-        }
-          break;
+          _cursor += line.Count + 1;
+        } break;
         case '+':
         case '-':
         case '.':
@@ -232,14 +282,15 @@ namespace ScratchesEPS {
         case '8':
         case '9': {
           var number = SegmentUntilDelimiter(_cursor);
-          if (Ext.FirstIndexOf(number, '.') > -1)
+          if(Ext.FirstIndexOf(number, '.') > -1)
             token.Type = TokenType.LITERAL_DECIMAL;
           else
             token.Type = TokenType.LITERAL_INTEGER;
           token.Content = number;
           token.Length = number.Count;
 
-          _cursor += token.Length;
+          _cursor    += token.Length;
+          _colCursor += token.Length;
         }
           break;
         case '{':
@@ -249,64 +300,61 @@ namespace ScratchesEPS {
           token.Length = 1;
 
           _cursor++;
-        }
-          break;
+          _colCursor++;
+        } break;
         case '[':
         case ']': {
-          token.Type = TokenType.BRACKETS;
+          token.Type = TokenType.BRACKET;
           token.Content = new ArraySegment<char>(_data, _cursor, 1);
           token.Length = 1;
 
           _cursor++;
-        }
-          break;
+          _colCursor++;
+        } break;
         case '(': {
           token.Type = TokenType.LITERAL_STRING;
           token.Content = SegmentUntil(_cursor + 1, ')');
           token.Length = token.Content.Count + 2;
 
-          _cursor += token.Length;
-        }
-          break;
+          _cursor    += token.Length;
+          _colCursor += token.Length;
+        } break;
         case '<': {
           token.Type = TokenType.LITERAL_STRING_HEX;
           token.Content = SegmentUntil(_cursor + 1, '>');
           token.Length = token.Content.Count + 2;
 
-          _cursor += token.Length;
-        }
-          break;
+          _cursor    += token.Length;
+          _colCursor += token.Length;
+        } break;
         case '/': {
-          token.Type = TokenType.NAME_DEF;
+          token.Type = TokenType.LITERAL_NAME;
           token.Content = SegmentUntilDelimiter(_cursor + 1);
           token.Length = token.Content.Count + 1;
 
-          _cursor += token.Length;
-        }
-          break;
+          _cursor    += token.Length;
+          _colCursor += token.Length;
+        } break;
         default: {
-          var content = SegmentUntilDelimiter(_cursor);
-
-          var contentSpan = (ReadOnlySpan<char>)content;
-          if (contentSpan.Equals("true", StringComparison.Ordinal)) {
-            token.Type = TokenType.LITERAL_BOOLEAN;
+          token.Content = SegmentUntilDelimiter(_cursor);
+          
+          var contentSpan = (ReadOnlySpan<char>)token.Content;
+          if(contentSpan.Equals("true", StringComparison.Ordinal)) {
+            token.Type    = TokenType.LITERAL_BOOLEAN;
             token.Keyword = Keyword.LITERAL_TRUE;
-          }
-          else if (contentSpan.Equals("false", StringComparison.Ordinal)) {
-            token.Type = TokenType.LITERAL_BOOLEAN;
+          } else if(contentSpan.Equals("false", StringComparison.Ordinal)) {
+            token.Type    = TokenType.LITERAL_BOOLEAN;
             token.Keyword = Keyword.LITERAL_TRUE;
-          }
-          else if (KeywordMap.TryGetValue(contentSpan, out var keyword)) {
-            token.Type = TokenType.KEYWORD;
+          } else if(KeywordMap.TryGetValue(contentSpan, out var keyword)) {
+            token.Type    = TokenType.KEYWORD;
             token.Keyword = keyword;
           }
 
-          token.Content = content;
-          token.Length = content.Count;
+          token.Length = token.Content.Count;
 
-          _cursor += token.Length;
-        }
-          break;
+          _cursor    += token.Length;
+          _colCursor += token.Length;
+        } break;
       }
 
       return token;
