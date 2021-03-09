@@ -138,7 +138,7 @@ namespace ScratchesEPS {
       var v1 = Vector2.Transform(new Vector2(x1, y1), gState.CTM);
       var v2 = Vector2.Transform(new Vector2(x2, y2), gState.CTM);
       var v3 = Vector2.Transform(new Vector2(x3, y3), gState.CTM);
-      gState.Operations.Add(new GOperation(Keyword.LINE_TO, v1.X, v2.Y, v2.X, v2.Y, v3.X, v3.Y));
+      gState.Operations.Add(new GOperation(Keyword.CURVE_TO, v1.X, v1.Y, v2.X, v2.Y, v3.X, v3.Y));
       Ext.WriteLineStub();
     }
 

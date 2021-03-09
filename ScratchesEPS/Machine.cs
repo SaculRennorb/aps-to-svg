@@ -1172,7 +1172,7 @@ namespace ScratchesEPS {
         Graphics.CurveTo(
           Ext.ToFloat(t1.Value), Ext.ToFloat(t2.Value),
           Ext.ToFloat(t3.Value), Ext.ToFloat(t4.Value),
-          Ext.ToFloat(t5.Value), Ext.ToFloat(t5.Value)
+          Ext.ToFloat(t5.Value), Ext.ToFloat(t6.Value)
         );
       });
       AddSysAction(Keyword.CLOSE_PATH, (s) => {

@@ -19,6 +19,7 @@ namespace ScratchesEPS {
           case Keyword.NEW_PATH  : line = "<path d=\""; break;
           case Keyword.MOVE_TO   : line = $"M {op.Arg1} {op.Arg2}"; break;
           case Keyword.LINE_TO   : line = $"L {op.Arg1} {op.Arg2}"; break;
+          case Keyword.CURVE_TO  : line = $"C {op.Arg1} {op.Arg2} {op.Arg3} {op.Arg4} {op.Arg5} {op.Arg6} "; break;
           case Keyword.CLOSE_PATH: line = "z\" />"; break;
           default: Ext.WriteLineRed($"cant parse GOp {op.Type}"); continue;
         }
