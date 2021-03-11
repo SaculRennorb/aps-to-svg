@@ -51,6 +51,28 @@ namespace ScratchesEPS {
     public double   Offset;
   }
 
+  struct SubPath {
+    public RefStack<GOperation> OPs;
+  }
+
+  struct PaintCall {
+    public Keyword Type;
+    public SubPath[] SubPaths;
+  }
+
+  struct Path {
+    public RefStack<SubPath>   SubPaths;
+    public RefStack<PaintCall> PaintCalls;
+    public float CurrentX, CurrentY;
+
+    public PaintCall PCallFromCurrentState(Keyword type) {
+      return new PaintCall {
+        Type = type,
+        SubPaths = this.SubPaths.ToArray(),
+      };
+    }
+  }
+
   struct GraphicsState {
     public Matrix3x2   CTM;
     public Point       Position;
@@ -70,6 +92,7 @@ namespace ScratchesEPS {
     
 
     public List<GOperation> Operations;
+    public RefStack<Path>   Paths;
   }
 
   static class Graphics {
@@ -77,9 +100,12 @@ namespace ScratchesEPS {
 
     public static Matrix3x2 DefaultOutputMtx = Matrix3x2.Identity;
 
+    public static string BoundingBox;
+
     static Graphics() {
       StateStack.Push(new GraphicsState() {
         Operations = new List<GOperation>(),
+        Paths      = new RefStack<Path>(16),
         CTM        = Matrix3x2.Identity,  
       });
     }
@@ -118,19 +144,60 @@ namespace ScratchesEPS {
     public static void NewPath() {
       ref var gState = ref StateStack.Peek();
       gState.Operations.Add(new GOperation(Keyword.NEW_PATH));
+
+      gState.Paths.Push( new Path {
+        SubPaths   = new RefStack<SubPath>(16),
+        PaintCalls = new RefStack<PaintCall>(16),
+      });
+
       Ext.WriteLineStub();
     }
 
     public static void MoveTo(float x, float y) {
       ref var gState = ref StateStack.Peek();
       var v = Vector2.Transform(new Vector2(x, y), gState.CTM);
-      gState.Operations.Add(new GOperation(Keyword.MOVE_TO, arg1: v.X, arg2: v.Y));
+      var gop = new GOperation(Keyword.MOVE_TO, arg1: v.X, arg2: v.Y);
+      gState.Operations.Add(gop);
+
+      ref var path = ref gState.Paths.Peek();
+      var subPaths = path.SubPaths;
+      void MakeNewPath() {
+        var ops = new RefStack<GOperation>(16);
+        ops.Push(in gop);
+        subPaths.Push(new SubPath { OPs = ops });
+      }
+
+      
+      if(subPaths.UsedSlots == 0) {
+        MakeNewPath();
+      } else {
+        var subPath = subPaths.Peek();
+        if(subPath.OPs.UsedSlots == 0) {
+          subPath.OPs.Push(in gop);
+        } else if(subPath.OPs.UsedSlots == 1) {
+          if(subPath.OPs.Peek().Type == Keyword.MOVE_TO) {
+            subPath.OPs.Data[0] = gop;
+          } else {
+            MakeNewPath();
+          }
+        } else {
+          subPath.OPs.Push(in gop);
+        }
+      }
+
+      path.CurrentX = gop.Arg1;
+      path.CurrentY = gop.Arg2;
+
       Ext.WriteLineStub();
     }
     public static void LineTo(float x, float y) {
       ref var gState = ref StateStack.Peek();
       var v = Vector2.Transform(new Vector2(x, y), gState.CTM);
-      gState.Operations.Add(new GOperation(Keyword.LINE_TO, arg1: v.X, arg2: v.Y));
+      var gop = new GOperation(Keyword.LINE_TO, arg1: v.X, arg2: v.Y);
+      gState.Operations.Add(gop);
+
+      gState.Paths.Peek().SubPaths.Peek().OPs.Push(in gop);
+
       Ext.WriteLineStub();
     }
     public static void CurveTo(float x1, float y1, float x2, float y2, float x3, float y3) {
@@ -138,19 +205,50 @@ namespace ScratchesEPS {
       var v1 = Vector2.Transform(new Vector2(x1, y1), gState.CTM);
       var v2 = Vector2.Transform(new Vector2(x2, y2), gState.CTM);
       var v3 = Vector2.Transform(new Vector2(x3, y3), gState.CTM);
-      gState.Operations.Add(new GOperation(Keyword.CURVE_TO, v1.X, v1.Y, v2.X, v2.Y, v3.X, v3.Y));
+      var gop = new GOperation(Keyword.CURVE_TO, v1.X, v1.Y, v2.X, v2.Y, v3.X, v3.Y);
+      gState.Operations.Add(gop);
+
+      ref var path = ref gState.Paths.Peek();
+      path.SubPaths.Peek().OPs.Push(gop);
+
+      path.CurrentX = gop.Arg1;
+      path.CurrentY = gop.Arg2;
+
       Ext.WriteLineStub();
     }
 
     public static void ClosePath() {
       ref var gState = ref StateStack.Peek();
-      gState.Operations.Add(new GOperation(Keyword.CLOSE_PATH));
+      var gop = new GOperation(Keyword.CLOSE_PATH);
+      gState.Operations.Add(gop);
+      
+      var subPath = gState.Paths.Peek().SubPaths.Peek();
+      if(subPath.OPs.Peek().Type != Keyword.CLOSE_PATH) {
+        subPath.OPs.Push(in gop);
+      }
+
       Ext.WriteLineStub();
     }
 
     public static void Fill() {
       ref var gState = ref StateStack.Peek();
       gState.Operations.Add(new GOperation(Keyword.FILL));
+
+      ref var path = ref gState.Paths.Peek();
+      ref var subPath = ref path.SubPaths.Peek();
+      if(subPath.OPs.Peek().Type != Keyword.CLOSE_PATH) {
+        subPath.OPs.Push(new GOperation(Keyword.CLOSE_PATH));
+      }
+
+      path.PaintCalls.Push(path.PCallFromCurrentState(Keyword.FILL));
+      
+      var ops = new RefStack<GOperation>(16);
+      ops.Push(new GOperation(Keyword.MOVE_TO, path.CurrentX, path.CurrentY));
+      path.SubPaths.Push(new SubPath { OPs = ops });
+      
+      
+      gState.Operations.Add(new GOperation(Keyword.CLOSE_PATH));
+      
       Ext.WriteLineStub();
     }
     public static void EOFill() {
@@ -177,7 +275,7 @@ namespace ScratchesEPS {
 
     public static void GSave() {
       var newState = StateStack.Peek();
-      newState.Operations = new List<GOperation>(newState.Operations);
+      //newState.Operations = new List<GOperation>(newState.Operations);
       newState.Operations.Add(new GOperation(Keyword.G_SAVE));
       StateStack.Push(newState);
     }

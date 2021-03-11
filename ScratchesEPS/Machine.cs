@@ -402,8 +402,16 @@ namespace ScratchesEPS {
 
 
     public static void ProcessToken(in Token token) {
-      if(token.Type == TokenType.COMMENT || token.Type == TokenType.PDF_TAG)
+      if(token.Type == TokenType.PDF_TAG)
         return;
+      if(token.Type == TokenType.COMMENT) {
+        var bbkey = "%BoundingBox: ";
+        if(((ReadOnlySpan<char>)token.Content).StartsWith(bbkey)) {
+          Graphics.BoundingBox = new string(token.Content.Slice(bbkey.Length));
+        }
+
+        return;
+      }
 
       StackToken? stackToken;
 

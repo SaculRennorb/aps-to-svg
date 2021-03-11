@@ -42,8 +42,9 @@ namespace ScratchesEPS {
       }
 
       sw.Restart();
-      SVGBuilder.BuildSVG(Graphics.StateStack.Peek().Operations);
+      SVGBuilder.BuildSVG();
       sw.Stop();
+      Ext.WriteLinePurple($"building the svg took {sw.ElapsedMilliseconds}ms/{sw.ElapsedTicks}t");
     }
   }
 }

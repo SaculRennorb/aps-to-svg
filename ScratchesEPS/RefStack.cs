@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Text;
 
@@ -35,6 +36,35 @@ namespace ScratchesEPS {
       var arr = new T[UsedSlots];
       Array.Copy(Data, 0, arr, 0, UsedSlots);
       return arr;
+    }
+
+    public RefStack<T>.Enumerator GetEnumerator() {
+      return new Enumerator(this);
+    }
+
+    public struct Enumerator {
+      private readonly RefStack<T> _source;
+      private int                  _currentInd;
+
+      public Enumerator(RefStack<T> source) {
+        _source     = source;
+        _currentInd = -1;
+      }
+
+      public bool MoveNext() {
+        return ++_currentInd < _source.UsedSlots;
+      }
+      public void Reset() {
+        _currentInd = 0;
+      }
+
+      public ref T Current {
+        get {
+          return ref _source.Data[_currentInd];
+        }
+      }
+      
+      public void Dispose() { }
     }
   }
 }
